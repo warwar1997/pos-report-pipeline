@@ -1,0 +1,17 @@
+# .NET
+bin/
+obj/
+TestResults/
+*.user
+
+# CDK / node
+node_modules/
+cdk.out/
+*.js
+*.d.ts
+!infra/jest.config.js
+
+# tooling
+.vs/
+.idea/
+.DS_Store
