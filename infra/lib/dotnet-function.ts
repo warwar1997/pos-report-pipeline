@@ -1,4 +1,5 @@
 import { spawnSync } from 'child_process';
+import { existsSync } from 'fs';
 import * as path from 'path';
 import { DockerImage, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -109,7 +110,8 @@ function buildDotNetProject(projectName: string): lambda.Code {
       command: [
         '/bin/sh',
         '-c',
-        `dotnet publish ${projectName} --configuration Release --output /asset-output --nologo`,
+        `dotnet publish ${projectName} --configuration Release --output /asset-output --nologo` +
+          ` && test -f /asset-output/${projectName}.runtimeconfig.json`,
       ],
       environment: {
         // The build container runs as a non-root user without a writable home directory.
@@ -139,6 +141,18 @@ function buildDotNetProject(projectName: string): lambda.Code {
           if (build.error || build.status !== 0) {
             // Falling back to Docker; CDK prints this path when it happens.
             return false;
+          }
+
+          // The managed .NET runtime refuses to start without this file, and a class library
+          // only produces it when GenerateRuntimeConfigurationFiles is set. Catching it here
+          // turns a failure that would otherwise appear as a 500 from a deployed function into
+          // a build error.
+          const runtimeConfig = path.join(outputDirectory, `${projectName}.runtimeconfig.json`);
+          if (!existsSync(runtimeConfig)) {
+            throw new Error(
+              `${projectName} published without ${projectName}.runtimeconfig.json. ` +
+                'Set <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles> in its .csproj.',
+            );
           }
 
           return true;

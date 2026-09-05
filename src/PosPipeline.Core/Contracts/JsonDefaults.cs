@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -12,6 +13,11 @@ public static class JsonDefaults
         PropertyNameCaseInsensitive = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         WriteIndented = true,
+        // The default encoder escapes characters that are dangerous in HTML, which turns the
+        // quotes in an error message into '. Everything here is served as application/json
+        // or stored as a JSON object, never interpolated into a page, so the readable form is
+        // both safe and much easier to work with from the CLI.
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     public static string Serialize<T>(T value) => JsonSerializer.Serialize(value, Options);
