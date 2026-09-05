@@ -66,6 +66,8 @@ public class PosReportParserTests
     [InlineData("POS/UL204 RGN/TO BKK/041205/N1642.3E09612.5/450/12500/2800", "flight and departure")]
     [InlineData("POS/UL204.FR RGN/BKK/041205/N1642.3E09612.5/450/12500/2800", "destination")]
     [InlineData("POS/UL204.FR RGN/TO BKK/4125/N1642.3E09612.5/450/12500/2800", "day and time")]
+    [InlineData("POS/UL204.FR RGN/TO BKK/042505/N1642.3E09612.5/450/12500/2800", "day and time")]
+    [InlineData("POS/UL204.FR RGN/TO BKK/041275/N1642.3E09612.5/450/12500/2800", "day and time")]
     public void ParseIdentity_rejects_malformed_messages(string? message, string expectedFragment)
     {
         var error = Assert.Throws<PosReportFormatException>(() => PosReportParser.ParseIdentity(message, ReceivedAt));

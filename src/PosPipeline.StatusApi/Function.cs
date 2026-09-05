@@ -33,9 +33,17 @@ public class Function
         {
             var status = await PipelineServices.CreateStatusUseCase().ExecuteAsync(flightId.Trim());
 
-            return status is null
-                ? ApiResponses.Error(HttpStatusCode.NotFound, $"No status is available for flight '{flightId}'.")
-                : ApiResponses.Json(HttpStatusCode.OK, status);
+            if (status is null)
+            {
+                // Worth recording: it is how a caller polling too early looks from this side.
+                context.Logger.LogInformation($"No status recorded yet for flight '{flightId}'.");
+
+                return ApiResponses.Error(HttpStatusCode.NotFound, $"No status is available for flight '{flightId}'.");
+            }
+
+            context.Logger.LogInformation($"Flight '{flightId}' is {status.Status} as of {status.Timestamp}.");
+
+            return ApiResponses.Json(HttpStatusCode.OK, status);
         }
         catch (Exception error)
         {

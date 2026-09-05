@@ -278,7 +278,7 @@ cd src
 dotnet test
 ```
 
-65 tests covering the parser (including the malformed messages that must produce a 400), the
+67 tests covering the parser (including the malformed messages that must produce a 400), the
 degrees/minutes conversion in all four hemispheres, the haversine distance, the fuel and time
 calculation, and each use case against in-memory doubles for S3, DynamoDB and SQS.
 

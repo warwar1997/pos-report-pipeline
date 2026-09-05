@@ -31,8 +31,10 @@ public static class PosReportParser
         @"^TO\s+(?<destination>[A-Z]{3})$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    // Hour and minute ranges are enforced here so an impossible time is a format error at the
+    // API rather than an exception when the timestamp is later constructed.
     private static readonly Regex DayTimePattern = new(
-        @"^(?<day>\d{2})(?<hour>\d{2})(?<minute>\d{2})$",
+        @"^(?<day>\d{2})(?<hour>[01]\d|2[0-3])(?<minute>[0-5]\d)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex NumberPattern = new(
