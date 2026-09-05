@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PosPipeline.Core\PosPipeline.Core.csproj" />
+    <!-- For the handler test; the other Lambda entry points are covered through their use cases. -->
+    <ProjectReference Include="..\PosPipeline.IngestApi\PosPipeline.IngestApi.csproj" />
   </ItemGroup>
 
 </Project>

@@ -36,7 +36,9 @@ response=$(curl -sS -X POST "${api_url}/pos-reports" \
 echo "  -> ${response}"
 
 # The response is small and predictable, so a grep keeps this script dependency-free.
-flight_id=$(printf '%s' "$response" | grep -o '"flightId": *"[^"]*"' | head -1 | cut -d'"' -f4)
+# `|| true` keeps `set -e` from killing the script here: a response with no flight ID is
+# handled by the check below, which reports it properly.
+flight_id=$(printf '%s' "$response" | grep -o '"flightId": *"[^"]*"' | head -1 | cut -d'"' -f4 || true)
 
 if [[ -z "$flight_id" ]]; then
   echo "No flight ID in the response; stopping." >&2

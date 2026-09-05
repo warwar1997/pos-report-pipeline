@@ -21,10 +21,11 @@ public class Function
 {
     public async Task<APIGatewayProxyResponse> HandleAsync(APIGatewayProxyRequest request, ILambdaContext context)
     {
-        var rawMessage = ReadBody(request);
-
         try
         {
+            // Inside the try: a body that is not valid base64 is a client error, not a fault.
+            var rawMessage = ReadBody(request);
+
             var useCase = PipelineServices.CreateIngestUseCase(context.Logger);
             var result = await useCase.ExecuteAsync(rawMessage);
 
@@ -53,8 +54,21 @@ public class Function
     /// API Gateway base64-encodes the body when the content type is treated as binary, so
     /// decode it before handing the text on.
     /// </summary>
-    private static string? ReadBody(APIGatewayProxyRequest request) =>
-        request.IsBase64Encoded && request.Body is not null
-            ? Encoding.UTF8.GetString(Convert.FromBase64String(request.Body))
-            : request.Body;
+    /// <exception cref="PosReportFormatException">The body claims to be base64 but is not.</exception>
+    private static string? ReadBody(APIGatewayProxyRequest request)
+    {
+        if (!request.IsBase64Encoded || request.Body is null)
+        {
+            return request.Body;
+        }
+
+        try
+        {
+            return Encoding.UTF8.GetString(Convert.FromBase64String(request.Body));
+        }
+        catch (FormatException)
+        {
+            throw new PosReportFormatException("Request body is marked as base64 but could not be decoded.");
+        }
+    }
 }

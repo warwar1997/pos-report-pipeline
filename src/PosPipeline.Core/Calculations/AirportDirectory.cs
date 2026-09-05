@@ -31,8 +31,6 @@ public static class AirportDirectory
             ["ICN"] = new(37.4602, 126.4407),  // Seoul Incheon
         };
 
-    public static IReadOnlyCollection<string> KnownCodes => (IReadOnlyCollection<string>)Airports.Keys;
-
     public static bool TryGetLocation(string? airportCode, out GeoPoint location)
     {
         location = default;
