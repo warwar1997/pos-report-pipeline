@@ -41,7 +41,9 @@ public class Function
                 return ApiResponses.Error(HttpStatusCode.NotFound, $"No status is available for flight '{flightId}'.");
             }
 
-            context.Logger.LogInformation($"Flight '{flightId}' is {status.Status} as of {status.Timestamp}.");
+            context.Logger.LogInformation(
+                $"Returning status for flight '{flightId}' as of {status.Timestamp} " +
+                $"({(status.RemainingFlightTimeMinutes is null ? "parsed, not yet calculated" : "calculated")}).");
 
             return ApiResponses.Json(HttpStatusCode.OK, status);
         }

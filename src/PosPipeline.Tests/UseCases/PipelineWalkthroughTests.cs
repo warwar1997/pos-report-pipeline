@@ -40,7 +40,11 @@ public class PipelineWalkthroughTests
         await parse.ExecuteAsync(accepted.ObjectKey);
 
         var queued = Assert.Single(_queue.Messages);
-        Assert.Equal(FlightStatus.Parsed, (await status.ExecuteAsync(accepted.FlightId))!.Status);
+
+        // Parsed but not calculated: the flight is known, the numbers are not there yet.
+        var parsedStatus = await status.ExecuteAsync(accepted.FlightId);
+        Assert.NotNull(parsedStatus);
+        Assert.Null(parsedStatus!.RemainingFlightTimeMinutes);
 
         // 4. The queue triggers the calculator.
         _clock.UtcNow = new DateTimeOffset(2026, 9, 4, 15, 12, 33, 500, TimeSpan.Zero);
@@ -51,8 +55,7 @@ public class PipelineWalkthroughTests
         var finalStatus = await status.ExecuteAsync(accepted.FlightId);
 
         Assert.NotNull(finalStatus);
-        Assert.Equal(FlightStatus.Calculated, finalStatus!.Status);
-        Assert.Equal(43, finalStatus.RemainingFlightTimeMinutes);
+        Assert.Equal(43, finalStatus!.RemainingFlightTimeMinutes);
         Assert.Equal(10513, finalStatus.EstimatedFuelAtArrivalKg);
         Assert.False(finalStatus.LowFuelWarning);
 

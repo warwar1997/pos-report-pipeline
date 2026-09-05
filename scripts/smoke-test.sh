@@ -50,7 +50,8 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
   status=$(curl -sS "${api_url}/status/${flight_id}")
   echo "  attempt ${attempt}: ${status}"
 
-  if printf '%s' "$status" | grep -q 'CALCULATED\|LOW_FUEL_WARNING'; then
+  # The calculated fields only appear once the calculator has written a result.
+  if printf '%s' "$status" | grep -q 'remainingFlightTimeMinutes'; then
     echo
     echo "Calculation complete for ${flight_id}."
     exit 0

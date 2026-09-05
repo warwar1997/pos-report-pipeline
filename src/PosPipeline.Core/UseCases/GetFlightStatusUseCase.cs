@@ -8,8 +8,9 @@ namespace PosPipeline.Core.UseCases;
 /// Answers GET /status/{flightId} with the most recent thing known about a flight.
 ///
 /// A calculation result is preferred when one exists; otherwise the latest parsed report is
-/// reported as PARSED. A flight whose report has been received but not yet parsed has no row
-/// in either table yet and returns null, which the handler turns into a 404.
+/// reported, with the calculated fields left out. A flight whose report has been received but
+/// not yet parsed has no row in either table yet and returns null, which the handler turns
+/// into a 404.
 /// </summary>
 public sealed class GetFlightStatusUseCase
 {
@@ -39,7 +40,6 @@ public sealed class GetFlightStatusUseCase
             return new FlightStatusResponse
             {
                 FlightId = flightId,
-                Status = latestResult.Status,
                 Timestamp = latestResult.Timestamp,
                 RemainingFlightTimeMinutes = result.RemainingFlightTimeMinutes,
                 EstimatedFuelAtArrivalKg = result.EstimatedFuelAtArrivalKg,
@@ -53,7 +53,6 @@ public sealed class GetFlightStatusUseCase
             return new FlightStatusResponse
             {
                 FlightId = flightId,
-                Status = FlightStatus.Parsed,
                 Timestamp = latestParsed.Timestamp,
             };
         }

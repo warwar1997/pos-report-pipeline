@@ -14,13 +14,11 @@ public sealed class FlightStatusResponse
 {
     public required string FlightId { get; init; }
 
-    /// <summary>PARSED, CALCULATED or LOW_FUEL_WARNING.</summary>
-    public required string Status { get; init; }
-
     /// <summary>Timestamp of the most recent record behind this status.</summary>
     public required string Timestamp { get; init; }
 
-    // Present once a calculation exists for the flight.
+    // Present once a calculation exists for the flight. Until then only the two fields above
+    // are returned, which is how a caller can tell the calculator has not caught up yet.
     public int? RemainingFlightTimeMinutes { get; init; }
     public double? EstimatedFuelAtArrivalKg { get; init; }
     public bool? LowFuelWarning { get; init; }

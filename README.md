@@ -96,11 +96,13 @@ curl -X POST "$API_URL/pos-reports" \
   --data "POS/UL204.FR RGN/TO BKK/041205/N1642.3E09612.5/450/12500/2800"
 ```
 
-`202 Accepted`:
+`200 OK`:
 
 ```json
 { "flightId": "UL20420260904RGNBKK", "status": "RECEIVED" }
 ```
+
+`RECEIVED` means the raw message is stored; parsing and calculation happen asynchronously.
 
 `400 Bad Request` when the body is missing, does not start with `POS/`, does not have eight
 `/`-separated segments, or its flight, route or day/time fields are malformed:
@@ -120,7 +122,6 @@ curl "$API_URL/status/UL20420260904RGNBKK"
 ```json
 {
   "flightId": "UL20420260904RGNBKK",
-  "status": "CALCULATED",
   "timestamp": "2026-09-04T12:06:15.842Z",
   "remainingFlightTimeMinutes": 43,
   "estimatedFuelAtArrivalKg": 10513,
@@ -128,17 +129,19 @@ curl "$API_URL/status/UL20420260904RGNBKK"
 }
 ```
 
-While the calculator is still working, the same call returns the parsed state:
+While the calculator is still working, the same call returns what is known so far — the flight
+and the timestamp of its latest report, without the calculated fields:
 
 ```json
-{ "flightId": "UL20420260904RGNBKK", "status": "PARSED", "timestamp": "2026-09-04T12:05:00Z" }
+{ "flightId": "UL20420260904RGNBKK", "timestamp": "2026-09-04T12:05:00Z" }
 ```
 
 `404 Not Found` when nothing is known about the flight yet. **A 404 in the first moment after
 posting a report is normal**, not an error: the report is stored, but the parser has not written
 its row yet. Poll for a second or two.
 
-`status` is one of `PARSED`, `CALCULATED` or `LOW_FUEL_WARNING`.
+A flight projected to run out of fuel comes back with `"lowFuelWarning": true`, and its row in
+the results table is marked `LOW_FUEL_WARNING`.
 
 ## What gets stored
 
@@ -394,7 +397,7 @@ Useful things to try:
 
 | Message | What happens |
 | --- | --- |
-| `POS/UL204.FR RGN/TO SIN/041205/N1642.3E09612.5/450/5000/8000` | Singapore is out of range on that fuel: `LOW_FUEL_WARNING` |
+| `POS/UL204.FR RGN/TO SIN/041205/N1642.3E09612.5/450/5000/8000` | Singapore is out of range on that fuel: `lowFuelWarning: true` |
 | `POS/UL204.FR RGN/TO BKK/041205/N1642.3E09612.5/450/12500` | Seven segments: `400` |
 | `POS/UL204.FR RGN/TO ZZZ/041205/N1642.3E09612.5/450/12500/2800` | Accepted and parsed, but the destination is unknown, so the calculation fails and the message ends up on the calculation dead-letter queue |
 
@@ -436,15 +439,16 @@ needs for the flight ID; the parser reads the whole message. A report with a cor
 is therefore accepted (it is a real report about a real flight) and fails later where it can be
 investigated, rather than being rejected with a `400` for a field the API never uses.
 
-**`202 Accepted` rather than `200 OK` on ingest.** The work is not done when the call returns —
-that is the whole point of the design — and `202` says exactly that. The body is the
-`{ flightId, status: "RECEIVED" }` the exercise asks for.
+**Ingest answers `200` with a `RECEIVED` body.** `202 Accepted` would describe the situation
+more precisely, since the work is not finished when the call returns, but the exercise specifies
+this response and matching it exactly is worth more than the nuance. The `RECEIVED` status in the
+body carries the same meaning.
 
 **Status is derived from the two tables, not stored.** There is no third "state" table to keep in
-step: the status endpoint queries the results table, falls back to the parsed-reports table, and
-reports `PARSED` when only the latter has a row. `RECEIVED` is what ingest returns; it is not
-persisted, because writing it would mean a DynamoDB write on the hot path for information the
-caller already has.
+step: the status endpoint queries the results table and falls back to the parsed-reports table,
+returning the calculated fields only once a result exists. `RECEIVED` is what ingest returns; it
+is not persisted, because writing it would mean a DynamoDB write on the hot path for information
+the caller already has.
 
 **The result object repeats its inputs.** It costs a few hundred bytes and means a result can be
 audited on its own — with the destination coordinates and the position it was computed from —

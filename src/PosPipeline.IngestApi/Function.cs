@@ -28,9 +28,10 @@ public class Function
             var useCase = PipelineServices.CreateIngestUseCase(context.Logger);
             var result = await useCase.ExecuteAsync(rawMessage);
 
-            // 202: the report is safely stored, but parsing and calculation have not run yet.
+            // The report is safely stored; parsing and calculation happen asynchronously, which
+            // is what the RECEIVED status in the body tells the caller.
             return ApiResponses.Json(
-                HttpStatusCode.Accepted,
+                HttpStatusCode.OK,
                 new IngestAcceptedResponse { FlightId = result.FlightId, Status = result.Status });
         }
         catch (PosReportFormatException error)

@@ -27,16 +27,19 @@ public class GetFlightStatusUseCaseTests
     }
 
     [Fact]
-    public async Task Reports_PARSED_while_the_calculation_is_still_in_flight()
+    public async Task Omits_the_calculated_fields_while_the_calculation_is_still_in_flight()
     {
         _parsedReports.Records.Add(new ParsedReportRecord(FlightId, "2026-09-04T12:05:00Z", "attachment/a.json"));
 
         var status = await _useCase.ExecuteAsync(FlightId);
 
         Assert.NotNull(status);
-        Assert.Equal(FlightStatus.Parsed, status!.Status);
-        Assert.Equal("2026-09-04T12:05:00Z", status.Timestamp);
+        Assert.Equal("2026-09-04T12:05:00Z", status!.Timestamp);
+
+        // No calculation yet, so the calculated fields are absent rather than zeroed.
         Assert.Null(status.RemainingFlightTimeMinutes);
+        Assert.Null(status.EstimatedFuelAtArrivalKg);
+        Assert.Null(status.LowFuelWarning);
     }
 
     [Fact]
@@ -49,8 +52,7 @@ public class GetFlightStatusUseCaseTests
         var status = await _useCase.ExecuteAsync(FlightId);
 
         Assert.NotNull(status);
-        Assert.Equal(FlightStatus.Calculated, status!.Status);
-        Assert.Equal("2026-09-04T12:16:03.100Z", status.Timestamp);
+        Assert.Equal("2026-09-04T12:16:03.100Z", status!.Timestamp);
         Assert.Equal(31, status.RemainingFlightTimeMinutes);
         Assert.Equal(10050, status.EstimatedFuelAtArrivalKg);
         Assert.False(status.LowFuelWarning);
@@ -63,8 +65,9 @@ public class GetFlightStatusUseCaseTests
 
         var status = await _useCase.ExecuteAsync(FlightId);
 
-        Assert.Equal(FlightStatus.LowFuelWarning, status!.Status);
-        Assert.True(status.LowFuelWarning);
+        Assert.NotNull(status);
+        Assert.True(status!.LowFuelWarning);
+        Assert.Equal(-3200, status.EstimatedFuelAtArrivalKg);
     }
 
     private void GivenResult(string timestamp, int remainingMinutes, double fuelAtArrivalKg, bool lowFuel)
