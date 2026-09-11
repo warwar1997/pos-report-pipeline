@@ -49,7 +49,7 @@ export class PosReportPipelineStack extends Stack {
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       enforceSSL: true,
-      // This is an assessment stack, so `cdk destroy` should leave nothing behind. A real
+      // A demo stack, so `cdk destroy` should leave nothing behind. A production
       // deployment would retain the bucket and the tables.
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,

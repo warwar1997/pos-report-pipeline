@@ -5,7 +5,7 @@ namespace PosPipeline.Core.Calculations;
 /// <summary>
 /// Remaining flight time and fuel at arrival.
 ///
-/// This is the simplified model the assessment asks for: great-circle distance to the
+/// A deliberately simplified model: great-circle distance to the
 /// destination, flown at the current ground speed, burning fuel at the current flow rate.
 /// It ignores wind, routing, climb/descent and reserves, so it is not an operational figure.
 /// </summary>

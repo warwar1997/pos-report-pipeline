@@ -7,6 +7,12 @@ arrival, and lets a caller check the status of a flight at any time.
 The Lambda handlers are C# (.NET 8). The infrastructure is AWS CDK in TypeScript, and
 `cdk deploy` builds the C# and deploys everything — nothing is created by hand in the console.
 
+**Why I built it.** I wanted a project where the interesting problems were not the framework:
+parsing a terse wire format correctly, inventing a date the message does not carry, wiring four
+functions together with events instead of calls, and writing IAM by hand rather than reaching for
+a `grant*` helper. The result is small enough to read in an afternoon and complete enough to
+deploy and use.
+
 ---
 
 ## Contents
@@ -37,12 +43,16 @@ POS/UL204.FR RGN/TO BKK/041205/N1642.3E09612.5/450/12500/2800
 
 Four Lambdas handle it, each doing one thing:
 
-| Lambda | Trigger | What it does |
-| --- | --- | --- |
-| **Ingest** | `POST /pos-reports` | Checks the message is well formed, derives the flight ID, writes the raw text to `s3://…/pos/`, replies with the flight ID |
-| **Parser** | S3 object created under `pos/` | Parses the message, writes the structured JSON to `attachment/`, writes a row to the parsed-reports table, puts a message on the calculation queue |
-| **Calculator** | Message on the calculation queue | Loads the parsed report, works out distance, remaining flight time and fuel at arrival, writes the result to `results/` and to the results table |
-| **Status** | `GET /status/{flightId}` | Returns the latest known state of the flight |
+- **Ingest** — triggered by `POST /pos-reports`. Checks the message is well formed, derives the
+  flight ID, writes the raw text to `s3://…/pos/`, and replies with the flight ID.
+- **Parser** — triggered by an S3 object created under `pos/`. Parses the message, writes the
+  structured JSON to `attachment/`, writes a row to the parsed-reports table, and puts a message
+  on the calculation queue.
+- **Calculator** — triggered by a message on the calculation queue. Loads the parsed report,
+  works out distance, remaining flight time and fuel at arrival, and writes the result to
+  `results/` and to the results table.
+- **Status** — triggered by `GET /status/{flightId}`. Returns the latest known state of the
+  flight.
 
 The stages are joined by events rather than by calls, so the API responds as soon as the raw
 message is safely stored, and a slow or failing calculation can never make ingest fail.
@@ -62,19 +72,20 @@ objects the pipeline writes to `attachment/` and `results/` cannot re-trigger th
 POS/{IATA}{flightNumber}.FR {departure}/TO {destination}/{ddHHmm}/{lat}{lon}/{groundSpeed}/{fuelOnBoard}/{fuelFlow}
 ```
 
-For the example message above:
+Reading the example message above, field by field:
 
-| Field | Raw | Value |
-| --- | --- | --- |
-| Flight | `UL204` | SriLankan 204 |
-| Route | `RGN` → `BKK` | Yangon to Bangkok |
-| Day and time | `041205` | day 04 at 12:05 UTC |
-| Latitude | `N1642.3` | 16 + 42.3/60 = **16.705** |
-| Longitude | `E09612.5` | 96 + 12.5/60 = **96.2083** |
-| Ground speed | `450` | 450 knots |
-| Fuel on board | `12500` | 12 500 kg |
-| Fuel flow | `2800` | 2 800 kg/h |
+- **Flight** — `UL204`, an IATA airline code followed by the flight number. The code is two
+  alphanumeric characters, so `8M`, `3K` and `U2` are all valid.
+- **Route** — `RGN` to `BKK`, Yangon to Bangkok.
+- **Day and time** — `041205`, meaning day 04 at 12:05 UTC. There is no year or month.
+- **Latitude** — `N1642.3`: two degree digits and minutes, so `16 + 42.3/60` = **16.705**.
+- **Longitude** — `E09612.5`: three degree digits and minutes, so `96 + 12.5/60` = **96.2083**.
+- **Ground speed** — `450` knots.
+- **Fuel on board** — `12500` kg.
+- **Fuel flow** — `2800` kg per hour.
 
+There is no separator inside the position block other than the hemisphere letters, and the two
+halves have different widths, so it is matched as a whole rather than split on a delimiter.
 `S` and `W` produce the same number, negated.
 
 **Flight ID.** The message carries a day but no year or month, so the year and month come from
@@ -229,8 +240,9 @@ estimatedFuelAtArrivalKg   = 12500 - (2800 x 0.7097)                    = 10 513
 If the fuel at arrival is negative, the result is flagged `lowFuelWarning: true` and the row in
 the results table is marked `LOW_FUEL_WARNING`.
 
-This is the simplified model the exercise asks for. It ignores wind, routing, climb and descent,
-diversions and reserves, so it is not an operational figure.
+This is a deliberately simplified model. It ignores wind, routing, climb and descent, diversions
+and reserves, so it is not an operational figure — it is enough to make the pipeline do real
+work with real numbers.
 
 ## Repository layout
 
@@ -267,12 +279,10 @@ that translates an AWS event into a use case call and back.
 
 ### Prerequisites
 
-| Tool | Version | Notes |
-| --- | --- | --- |
-| .NET SDK | 8.0 or newer | A newer SDK is fine; the projects target `net8.0` |
-| Node.js | 18 or newer | For the CDK app |
-| AWS CLI | v2 | Only needed to deploy |
-| Docker | optional | Only used if the .NET SDK is missing at deploy time |
+- **.NET SDK 8.0 or newer** — a newer SDK is fine; the projects target `net8.0`.
+- **Node.js 18 or newer** — for the CDK app.
+- **AWS CLI v2** — only needed to deploy.
+- **Docker** — optional, and only used if the .NET SDK is missing at deploy time.
 
 ### The C# tests
 
@@ -334,7 +344,7 @@ Credentials and region come from the usual AWS CLI configuration:
 
 ```bash
 export AWS_PROFILE=your-profile
-export AWS_REGION=ap-southeast-1
+export AWS_REGION=ap-southeast-2
 ```
 
 The stack is called `PosReportPipeline` by default. To deploy more than one copy into an
@@ -387,7 +397,7 @@ curl "${API_URL}status/UL20420260904RGNBKK"
 On Windows PowerShell, use `Invoke-RestMethod`:
 
 ```powershell
-$api = "https://xxxx.execute-api.ap-southeast-1.amazonaws.com/prod/"
+$api = "https://xxxx.execute-api.ap-southeast-2.amazonaws.com/prod/"
 Invoke-RestMethod -Method Post -Uri "${api}pos-reports" -ContentType "text/plain" `
   -Body "POS/UL204.FR RGN/TO BKK/041205/N1642.3E09612.5/450/12500/2800"
 Invoke-RestMethod -Uri "${api}status/UL20420260904RGNBKK"
@@ -395,26 +405,33 @@ Invoke-RestMethod -Uri "${api}status/UL20420260904RGNBKK"
 
 Useful things to try:
 
-| Message | What happens |
-| --- | --- |
-| `POS/UL204.FR RGN/TO SIN/041205/N1642.3E09612.5/450/5000/8000` | Singapore is out of range on that fuel: `lowFuelWarning: true` |
-| `POS/UL204.FR RGN/TO BKK/041205/N1642.3E09612.5/450/12500` | Seven segments: `400` |
-| `POS/UL204.FR RGN/TO ZZZ/041205/N1642.3E09612.5/450/12500/2800` | Accepted and parsed, but the destination is unknown, so the calculation fails and the message ends up on the calculation dead-letter queue |
+- `POS/UL204.FR RGN/TO SIN/041205/N1642.3E09612.5/450/5000/8000` — Singapore is out of range on
+  that fuel, so the result comes back with `lowFuelWarning: true`.
+- `POS/UL204.FR RGN/TO BKK/041205/N1642.3E09612.5/450/12500` — only seven segments, so `400`.
+- `POS/UL204.FR RGN/TO ZZZ/041205/N1642.3E09612.5/450/12500/2800` — accepted and parsed, but the
+  destination is unknown, so the calculation fails and the message ends up on the calculation
+  dead-letter queue.
 
 ## Failure handling
 
-| Failure | What happens |
-| --- | --- |
-| Malformed body on `POST /pos-reports` | `400` with the reason. Nothing is written |
-| S3 write fails during ingest | `500`. The caller can retry; nothing partial was recorded |
-| Message in S3 cannot be parsed | Logged as an error and dropped. Retrying would parse the same bytes, so the raw object is left in `pos/` for investigation instead |
-| Parser fails on S3, DynamoDB or SQS | The exception propagates, Lambda retries the event twice, and it then goes to the parser dead-letter queue |
-| Parser runs twice for one object | Harmless. Every write is keyed by flight ID and report timestamp, so a repeat overwrites rather than duplicates |
-| Calculation fails for one message in a batch | Only that message is returned to the queue (`reportBatchItemFailures`); the rest of the batch is not reprocessed |
-| Calculation keeps failing | After 3 receives SQS moves the message to the calculation dead-letter queue, where it is kept for 14 days |
-| Queued report is not in the table yet | Treated as transient and retried; DynamoDB is read with `ConsistentRead` so this should not normally happen |
-| Destination is not in the airport directory | The message fails and ends up on the dead-letter queue, with the unknown code in the log |
-| Status requested before the parser has run | `404`, which is the expected answer for the first moment after a report is posted |
+- **Malformed body on `POST /pos-reports`** — `400` with the reason. Nothing is written.
+- **S3 write fails during ingest** — `500`. The caller can retry; nothing partial was recorded.
+- **A message in S3 cannot be parsed** — logged as an error and dropped. Retrying would parse the
+  same bytes to the same failure, so the raw object is left in `pos/` for investigation instead.
+- **The parser fails on S3, DynamoDB or SQS** — the exception propagates, Lambda retries the
+  event twice, and it then goes to the parser dead-letter queue.
+- **The parser runs twice for one object** — harmless. Every write is keyed by flight ID and
+  report timestamp, so a repeat overwrites rather than duplicates.
+- **A calculation fails for one message in a batch** — only that message is returned to the queue
+  (`reportBatchItemFailures`); the rest of the batch is not reprocessed.
+- **A calculation keeps failing** — after 3 receives SQS moves the message to the calculation
+  dead-letter queue, where it is kept for 14 days.
+- **A queued report is not in the table yet** — treated as transient and retried; DynamoDB is
+  read with `ConsistentRead` so this should not normally happen.
+- **The destination is not in the airport directory** — the message fails and ends up on the
+  dead-letter queue, with the unknown code in the log.
+- **Status requested before the parser has run** — `404`, which is the expected answer for the
+  first moment after a report is posted.
 
 Both dead-letter queues are stack outputs, so investigating one is a `receive-message` away.
 
@@ -424,7 +441,7 @@ Both dead-letter queues are stack outputs, so investigating one is a `receive-me
 maths and the use cases, and depends on interfaces (`IObjectStore`, `IParsedReportRepository`,
 `ICalculationQueue`, `IClock`) rather than on the AWS SDK. `PosPipeline.Aws` implements those
 interfaces, and each Lambda is a handler that maps an event onto a use case. The point is
-testability: the interesting behaviour is exercised in milliseconds by ordinary unit tests, and
+testability: the interesting behaviour is covered in milliseconds by ordinary unit tests, and
 adding a second transport later (a Kinesis stream, say) means one new adapter, not a rewrite.
 
 **The parser reads the flight ID and receive time back out of the S3 key.** The flight date has
@@ -439,10 +456,9 @@ needs for the flight ID; the parser reads the whole message. A report with a cor
 is therefore accepted (it is a real report about a real flight) and fails later where it can be
 investigated, rather than being rejected with a `400` for a field the API never uses.
 
-**Ingest answers `200` with a `RECEIVED` body.** `202 Accepted` would describe the situation
-more precisely, since the work is not finished when the call returns, but the exercise specifies
-this response and matching it exactly is worth more than the nuance. The `RECEIVED` status in the
-body carries the same meaning.
+**Ingest answers `200` with a `RECEIVED` body.** `202 Accepted` would describe the situation more
+precisely, since the work is not finished when the call returns. I kept `200` for a plain,
+predictable contract and let the `RECEIVED` status in the body carry that meaning instead.
 
 **Status is derived from the two tables, not stored.** There is no third "state" table to keep in
 step: the status endpoint queries the results table and falls back to the parsed-reports table,
@@ -470,16 +486,16 @@ feed itself.
 
 **ARM64 and .NET 8.** Graviton is cheaper per millisecond and the published assemblies are
 portable IL, so nothing architecture-specific is needed. `net8.0` is the newest .NET with a
-managed Lambda runtime that any reviewer's SDK can also build; moving to a newer one is a change
-to `TargetFramework` in `src/Directory.Build.props` and `RUNTIME` in `infra/lib/dotnet-function.ts`.
+managed Lambda runtime, and any recent SDK can build it; moving to a newer one is a change to
+`TargetFramework` in `src/Directory.Build.props` and `RUNTIME` in `infra/lib/dotnet-function.ts`.
 
 **Logging is deliberately sparse.** One line per successful stage with the identifiers needed to
 follow a report through, warnings for the two situations worth noticing (a low-fuel projection,
 a flight ID that disagrees with its key), and errors with the exception attached. Lambda's JSON
 log format is on, so CloudWatch Logs Insights can filter by level rather than by string.
 
-**No authentication on the API.** Out of scope for the exercise, and I did not want to hand over
-a stack that needs credentials to try. It is the first thing I would add — see below.
+**No authentication on the API.** Out of scope for this version, and I did not want a stack that
+needs credentials just to try. It is the first thing I would add — see below.
 
 ## Assumptions
 
@@ -487,13 +503,13 @@ a stack that needs credentials to try. It is the first thing I would add — see
    the pipeline takes both from the moment the API received the request. A report received on
    1 October that carries day 30 is therefore dated 30 October, not 30 September. Handling that
    properly needs a rule the message alone cannot supply (for example, "a day in the future by
-   more than a day belongs to the previous month"), so I kept the specified behaviour and made
-   it explicit here. A day that does not exist in the current month is rejected with a `400`.
-2. **Coordinates are rounded to four decimal places** (about 11 m), which matches the worked
-   example and is far finer than the source data, whose minutes have one decimal.
-3. **Reported values are whole units**: minutes for time, kilograms for fuel. With full
-   precision throughout, the example works out to 42.58 minutes and 10 512.8 kg, which round to
-   the 43 minutes and 10 513 kg in the specification.
+   more than a day belongs to the previous month"), so I kept the simple behaviour and made it
+   explicit here. A day that does not exist in the current month is rejected with a `400`.
+2. **Coordinates are rounded to four decimal places** (about 11 m), which is far finer than the
+   source data, whose minutes carry one decimal.
+3. **Reported values are whole units**: minutes for time, kilograms for fuel. With full precision
+   throughout, the example works out to 42.58 minutes and 10 512.8 kg, which round to the
+   43 minutes and 10 513 kg shown above.
 4. **The airport directory is a hardcoded table** of fourteen codes, covering the region in the
    example plus the codes used in the tests. It lives behind one type, so replacing it with a
    navigation database is a local change.
@@ -503,9 +519,9 @@ a stack that needs credentials to try. It is the first thing I would add — see
    once, so a redelivered message can produce a second result row for the same report, with a
    later result timestamp. The status endpoint always reads the newest, so callers see a correct
    answer either way. Making it exactly-once would mean a conditional write keyed on the report
-   timestamp; I left it out because the exercise's key format asks for the generation time.
-7. **Callers already know the flight ID**, as the exercise states. There is no "list flights"
-   endpoint.
+   timestamp, which is why that timestamp is stored on the row.
+7. **Callers already know the flight ID.** There is no "list flights" endpoint; the ID is handed
+   back when the report is accepted.
 
 ## What I would add next
 
